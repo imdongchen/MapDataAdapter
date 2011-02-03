@@ -1,0 +1,15 @@
+<Addin id="OpenSim.ApplicationPlugins.MapDataAdapter" version="0.1"> 
+ <Runtime> 
+   <Import assembly="OpenSim.ApplicationPlugins.MapDataAdapter.dll"/> 
+<!-- assembly为实现生产者的dll的名称 --> 
+ </Runtime> 
+ <Dependencies> 
+   <Addin id="OpenSim" version="0.5" /> 
+<!-- addin id为host manifest中所用的id，对于Application plugin均为 OpenSim--> 
+ </Dependencies> 
+ <Extension path = "/OpenSim/Startup"> 
+<!-- path设为与host manifest中保持一致，对于Application plugin均为 /OpenSim/Startup--> 
+   <Plugin id="MapDataAdapter" type="OpenSim.ApplicationPlugins.MapDataAdapter.MapDataAdapter" /> 
+<!-- type处设置为Plugin对应的类的名称（是全称）, id无所谓，只要不重复即可 --> 
+ </Extension> 
+</Addin> 
