@@ -1,0 +1,5 @@
+E:\Codding\opensim-0.7.0.2-source\addon-modules\MapDataAdapter\obj\Debug\ResolveAssemblyReference.cache
+E:\Codding\opensim-0.7.0.2-source\bin\OpenSim.ApplicationPlugins.MapDataAdapter.dll
+E:\Codding\opensim-0.7.0.2-source\bin\OpenSim.ApplicationPlugins.MapDataAdapter.pdb
+E:\Codding\opensim-0.7.0.2-source\addon-modules\MapDataAdapter\obj\Debug\OpenSim.ApplicationPlugins.MapDataAdapter.dll
+E:\Codding\opensim-0.7.0.2-source\addon-modules\MapDataAdapter\obj\Debug\OpenSim.ApplicationPlugins.MapDataAdapter.pdb

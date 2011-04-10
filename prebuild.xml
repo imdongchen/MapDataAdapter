@@ -1,4 +1,4 @@
- <Project frameworkVersion="v3_5" name="OpenSim.ApplicationPlugins.MapDataAdapter" path="addon-modules/MapDataAdapter" type="Library">  
+  <Project frameworkVersion="v3_5" name="OpenSim.ApplicationPlugins.MapDataAdapter" path="addon-modules/MapDataAdapter" type="Library">  
   <Configuration name="Debug"> 
    <Options> 
     <OutputPath>../../bin/</OutputPath> 
@@ -22,7 +22,8 @@
   <Reference name="OpenSim.Framework.Servers"/>
   <Reference name="OpenSim.Region.Framework"/>
   <Reference name="OpenSim.Region.ClientStack"/>
-
+  <Reference name="MapRendererCL.dll"/>
+  <Reference name="System.Drawing"/>
 
   <Files> 
    <Match pattern="*.cs" recurse="true"/> 

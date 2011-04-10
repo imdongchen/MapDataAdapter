@@ -70,11 +70,13 @@
     </NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Fadd, Version=1.0.0.0, Culture=neutral, PublicKeyToken=41411ef5f05a116f, processorArchitecture=MSIL" />
+    <Reference Include="FreeImageNET, Version=3.13.1.1, Culture=neutral, processorArchitecture=MSIL" />
     <Reference Include="log4net.dll">
       <Name>log4net.dll</Name>
       <Private>False</Private>
     </Reference>
-    <Reference Include="MapRendererCL, Version=1.0.4050.19501, Culture=neutral, processorArchitecture=x86" />
+    <Reference Include="MapRendererCL, Version=1.0.4117.29315, Culture=neutral, processorArchitecture=x86" />
     <Reference Include="Mono.Addins.dll">
       <Name>Mono.Addins.dll</Name>
       <Private>False</Private>
@@ -83,6 +85,7 @@
       <Name>Nini.dll</Name>
       <Private>False</Private>
     </Reference>
+    <Reference Include="OpenMetaverse, Version=0.0.0.32642, Culture=neutral, processorArchitecture=MSIL" />
     <Reference Include="OpenMetaverseTypes.dll">
       <Name>OpenMetaverseTypes.dll</Name>
       <Private>False</Private>
@@ -92,12 +95,17 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
     <Reference Include="System.Xml">
       <Name>System.Xml</Name>
       <Private>False</Private>
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\OpenSim\Framework\Servers\HttpServer\OpenSim.Framework.Servers.HttpServer.csproj">
+      <Project>{FF1C6034-0000-0000-0000-000000000000}</Project>
+      <Name>OpenSim.Framework.Servers.HttpServer</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\OpenSim\Region\Application\OpenSim.csproj">
       <Name>OpenSim</Name>
       <Project>{438A9556-0000-0000-0000-000000000000}</Project>
@@ -128,14 +136,32 @@
       <Package>{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</Package>
       <Private>False</Private>
     </ProjectReference>
+    <ProjectReference Include="..\..\OpenSim\Services\Interfaces\OpenSim.Services.Interfaces.csproj">
+      <Project>{CF6A23D3-0000-0000-0000-000000000000}</Project>
+      <Name>OpenSim.Services.Interfaces</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Conversion.cs" />
+    <Compile Include="BBox.cs" />
+    <Compile Include="Conversion.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Layers\AgentLayer.cs" />
+    <Compile Include="Layers\BaseLayer.cs" />
+    <Compile Include="Layers\ObjectLayer.cs" />
+    <Compile Include="Layers\TerrainLayer.cs" />
     <Compile Include="MapDataAdapter.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="MapRegion.cs" />
     <EmbeddedResource Include="Resources\MapDataAdapter.addin.xml">
     </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <WCFMetadata Include="Service References\" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSHARP.Targets" />
   <PropertyGroup>

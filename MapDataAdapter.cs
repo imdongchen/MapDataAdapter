@@ -1,12 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
-
-using System.Text;
 using MapRendererCL;
 using OpenSim.Region.Framework.Scenes;
 using log4net;
 using OpenSim.Framework;
 using System.Reflection;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
+using OpenSim.Framework.Servers.HttpServer;
+using OpenMetaverse;
+using FreeImageAPI;
+using OpenSim.Services.Interfaces;
+//using PrimMesher;
+
 
 namespace OpenSim.ApplicationPlugins.MapDataAdapter
 {
@@ -19,11 +26,12 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
 
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        #region IApplicationPlugin Members
         // TODO: required by IPlugin, but likely not at all right 
         private string m_name = "MapDataAdapter";
         private string m_version = "0.0";
-
+        protected OpenSimBase m_openSim;
+        private BaseHttpServer m_server;
+        private List<MapRegion> m_regions;
         public string Version
         {
             get { return m_version; }
@@ -33,109 +41,7 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
             get { return m_name; }
         }
 
-        protected OpenSimBase m_openSim;
-        #endregion
 
-        private float _minX;
-        private float _minY;
-        private float _minZ;
-        private float _maxX;
-        private float _maxY;
-        private float _maxZ;
-        private List<LLProfileParamsCL> _profileParams;
-        private List<LLPathParamsCL> _pathParams;
-        private List<LLVolumeParamsCL> _volumeParams;
-        private int _volumeCount;
-        private List<LLVector3CL> _positions;
-        private List<LLQuaternionCL> _rotations;
-        private List<LLVector3CL> _scales;
-        private List<TextureEntryListCL> _textureEntryLists;
-        private string _cachePath;
-        private string _destPath;
-
-        public float minX
-        {
-            get { return _minX; }
-            set { _minX = value; }
-        }
-        public float minY
-        {
-            get { return _minY; }
-            set { _minY = value; }
-        }
-
-        public float minZ
-        {
-            get { return _minZ; }
-            set { _minZ = value; }
-        }
-
-        public float maxX
-        {
-            get { return _maxX; }
-            set { _maxX = value; }
-        }
-
-        public float maxY
-        {
-            get { return _maxY; }
-            set { _maxY = value; }
-        }
-        public float maxZ
-        {
-            get { return _maxZ; }
-            set { _maxZ = value; }
-        }
-        public List<LLProfileParamsCL> profileParams
-        {
-            get { return _profileParams; }
-            set { _profileParams = value; }
-        }
-        public List<LLPathParamsCL> pathParams
-        {
-            get { return _pathParams; }
-            set { _pathParams = value; }
-        }
-        public List<LLVolumeParamsCL> volumeParams
-        {
-            get { return _volumeParams; }
-            set { _volumeParams = value; }
-        }
-        public int volumeCount
-        {
-            get { return _volumeCount; }
-            set { _volumeCount = value; }
-        }
-        public List<LLVector3CL> positions
-        {
-            get { return _positions; }
-            set { _positions = value; }
-        }
-        public List<LLQuaternionCL> rotations
-        {
-            get { return _rotations; }
-            set { _rotations = value; }
-        }
-        public List<LLVector3CL> scales
-        {
-            get { return _scales; }
-            set { _scales = value; }
-        }
-        public List<TextureEntryListCL> textureEntryLists
-        {
-            get { return _textureEntryLists; }
-            set { _textureEntryLists = value; }
-        }
-        public string cachePath
-        {
-            get { return _cachePath; }
-            set { _cachePath = value; }
-        }
-        public string destPath
-        {
-            get { return _destPath; }
-            set { _destPath = value; }
-        }
         #endregion
 
         public void Initialise()
@@ -149,20 +55,26 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
             //将opensim的引用记为内部成员变量 
             m_log.Info("[MapDataAdapter]: initialized!");
             m_openSim = openSim;
-            _pathParams = new List<LLPathParamsCL>();
-            _profileParams = new List<LLProfileParamsCL>();
-            _positions = new List<LLVector3CL>();
-            _rotations = new List<LLQuaternionCL>();
-            _scales = new List<LLVector3CL>();
-            _textureEntryLists = new List<TextureEntryListCL>();
-            _volumeParams = new List<LLVolumeParamsCL>();
+            m_server = openSim.HttpServer;
+            m_regions = new List<MapRegion>();
         }
         public void PostInitialise()
         {
-            //在这儿干正事 
-            getData(128, 128, 0, 132, 132, 30, "e:\\\\", "e:\\\\"); //hard coded, how to pass params?
-            adaptData();
+            List<Scene> scenelist = m_openSim.SceneManager.Scenes;
+            lock (scenelist)
+            {
+                foreach (Scene scene in scenelist)
+                {
+                    m_regions.Add(new MapRegion(scene));
+                }
+            }
+            // register ows handler
+            string httpMethod = "GET";
+            string path = "/map";
+            OWSStreamHandler h = new OWSStreamHandler(httpMethod, path, owsHandler);
+            m_server.AddStreamHandler(h);
         }
+
         public void Dispose()
         {
 
@@ -171,123 +83,83 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
         public MapDataAdapter()
         {
         }
-        //public MapDataAdapter(int primNumber)
-        //{
-        //    _profileParams = new LLProfileParamsCL[primNumber];
-        //    _pathParams = new LLPathParamsCL[primNumber];
-        //    _volumeParams = new LLVolumeParamsCL[primNumber];
-        //    _positions = new LLVector3CL[primNumber];
-        //    _rotations = new LLQuaternionCL[primNumber];
-        //    _scales = new LLVector3CL[primNumber];
-        //    _textureEntryLists = new TextureEntryListCL[primNumber];
-        //    volumeCount = primNumber;
-        //}
 
-        public bool getData(float minX, float minY, float minZ, float maxX, float maxY, float maxZ, string cachePath, string destPath)
-        {
-            this.cachePath = cachePath;
-            this.destPath = destPath;
-            this.minX = minX;
-            this.minY = minY;
-            this.minZ = minZ;
-            this.maxX = maxX;
-            this.maxY = maxY;
-            this.maxZ = maxZ;
-            List<Scene> scenelist = m_openSim.SceneManager.Scenes;
-            int i = 0;
-            lock (scenelist)
+        public string owsHandler(string request, string path, string param,
+                                      OSHttpRequest httpRequest, OSHttpResponse httpResponse)
+        {            
+            switch (httpRequest.QueryString["SERVICE"])
             {
-                foreach (Scene scene in scenelist)
-                {
-                    List<EntityBase> objs = scene.GetEntities();
-                    lock( objs )
-                    {
-                        foreach (EntityBase obj in objs)
+                case "WMS":
+                    if (httpRequest.QueryString["REQUEST"] == "GetMap")
+                    {                        
+                        //parse query string
+                        string[] layers = httpRequest.QueryString["LAYERS"].Split(',');
+                        BBox bbox = new BBox(httpRequest.QueryString["BBOX"]);
+                        int height = Int32.Parse(httpRequest.QueryString["HEIGHT"]);
+                        int width = Int32.Parse(httpRequest.QueryString["WIDTH"]);                        
+                        int elevation = Int32.Parse(httpRequest.QueryString["ELEVATION"]);
+                        string regionID = httpRequest.QueryString["REGIONID"];                       
+                        foreach (MapRegion region in m_regions)
                         {
-                            if (obj is SceneObjectGroup)
+                            if (region.ID == regionID)
                             {
-                                SceneObjectGroup sog = (SceneObjectGroup)obj;
-                                foreach (SceneObjectPart part in sog.Children.Values)
+                                lock (region)
                                 {
-                                    if (part == null)
-                                        continue;
-                                    _positions.Add(Conversion.toLLVector3(part.GroupPosition));
-                                    _scales.Add(Conversion.toLLVector3(part.Scale));
-                                    _rotations.Add(Conversion.toLLQuaternion(part.RotationOffset));
-                                    PrimitiveBaseShape shape = part.Shape;
-                                    _pathParams.Add(new LLPathParamsCL(shape.PathCurve,
-                                        shape.PathBegin, shape.PathEnd,
-                                        shape.PathScaleX, shape.PathScaleY, 
-                                        shape.PathShearX, shape.PathShearY,
-                                        Convert.ToByte(shape.PathTwist), Convert.ToByte(shape.PathTwistBegin),
-                                        Convert.ToByte(shape.PathRadiusOffset), 
-                                        Convert.ToByte(shape.PathTaperX), Convert.ToByte(shape.PathTaperY),
-                                        shape.PathRevolutions, Convert.ToByte(shape.PathSkew)));
-                                    _profileParams.Add(new LLProfileParamsCL(shape.ProfileCurve,
-                                        shape.ProfileBegin, shape.ProfileEnd, shape.ProfileHollow));
-                                    _volumeParams.Add(new LLVolumeParamsCL(_profileParams[i], _pathParams[i]));
-                                    i++;
+                                    region.Elevation = elevation;
+                                    region.MapRegionBBox = bbox;
+                                    region.MapRegionImg = new MapRegionImage(width, height);
+                                    region.initialize(layers);
+                                    
+                                    Bitmap queryImg = region.generateMapRegionImg();
+                                    System.IO.MemoryStream stream = new System.IO.MemoryStream();
+                                    queryImg.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+                                    queryImg.Dispose();
+                                    byte[] byteImage = stream.ToArray();
+                                    stream.Close();
+                                    stream.Dispose();
+                                    httpResponse.ContentType = "image/png";
+                                    return Convert.ToBase64String(byteImage);
                                 }
                             }
                         }
+                    
+                    httpResponse.ContentType = "text/plain";
+                    return "Something unexpected occurs!";                                          
                     }
-                }
+                    else if (httpRequest.QueryString["REQUEST"] == "GetCapabilities")
+                    {
+                        httpResponse.ContentType = "text/xml";
+                        string capDes = "";
+                        TextReader textReader = new StreamReader("Capability.xml");
+                        capDes = textReader.ReadToEnd();
+                        textReader.Close();
+                        return capDes;
+                    }
+                    else
+                    {
+                        return "Sorry, the request method is not supported by this service.";
+                    }
+                //case "WFS":
+                //    if (httpRequest.QueryString["REQUEST"] == "GetFeature")
+                //    {
+                //        if ((httpRequest.QueryString["TypeName"] == "agent"))
+                //        {
+                //            switch (httpRequest.QueryString["FORMAT"])
+                //            { 
+                //                case "text":
+                //                    return m_agentLayer.GetFeaturesByText();
+                //                case "xml":
+                //                    return m_agentLayer.GetFeaturesByXML();
+                //            }
+                //        }
+                //        else
+                //            return "Query String is not supported";
+                //    }
+                //    break;
+                //default:
+                //    return "Unsupport Service";
             }
-            return true;
-        }
-
-        public bool adaptData()
-        {
-            volumeCount = volumeParams.Count;   
-            LLVector3CL[] pos = new LLVector3CL[volumeCount];
-            LLVector3CL[] sca = new LLVector3CL[volumeCount];
-            LLQuaternionCL[] rot = new LLQuaternionCL[volumeCount];
-            LLVolumeParamsCL[] vop = new LLVolumeParamsCL[volumeCount];
-            TextureEntryListCL[] tel = new TextureEntryListCL[volumeCount];
-            for (int i = 0; i < volumeCount; i++)
-            {
-                pos[i] = positions[i];
-                sca[i] = scales[i];
-                rot[i] = rotations[i];
-                vop[i] = volumeParams[i];
-                //tel[i] = textureEntryLists[i];
-            }
-            MapRenderCL mr = new MapRenderCL();
-            return mr.mapRender(minX, minY, minZ, maxX, maxY, maxZ, vop, volumeCount, pos, rot, sca, tel, cachePath, destPath);
-        }
-
-
-
-        //public static void  Main()
-        //{
-
-        //    OpenSimDataSetTableAdapters.primshapesTableAdapter pshapeta = new mapDataAdapter.OpenSimDataSetTableAdapters.primshapesTableAdapter();
-        //    OpenSimDataSet.primshapesDataTable ds = new OpenSimDataSet.primshapesDataTable();
-        //    pshapeta.Fill(ds);
-        //    //foreach (DataRow row in ds[2].ProfileHollow)
-        //    //{
-        //    //    Console.WriteLine("{0}", row[0]);
-        //    //}
-        //    Console.WriteLine("{0}", ds[2].ProfileHollow);
-        //    Console.ReadLine();
-
-        //    //MapDataAdapter mda = new MapDataAdapter();
-        //    //mda.adaptData(125,	//minX
-        //    //    125,  //minY
-        //    //    0, //minZ
-        //    //    132.5f,	//maxX
-        //    //    132.5f,	//maxY
-        //    //    30,	//maxZ
-        //    //    0,    //volumeParams
-        //    //    0,	//volume个数
-        //    //    0,	//region position
-        //    //    0,
-        //    //    0,
-        //    //    0,
-        //    //    "e:\\\\",		//纹理虚拟目录
-        //    //    "e:\\\\");
-        //}
+            return "Unsupported Service";
+        }   
     }
-
-        
 }
