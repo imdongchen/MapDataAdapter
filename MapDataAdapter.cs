@@ -12,6 +12,10 @@ using OpenSim.Framework.Servers.HttpServer;
 using OpenMetaverse;
 using FreeImageAPI;
 using OpenSim.Services.Interfaces;
+using Nini.Config;
+using System.Threading;
+using MySql.Data.MySqlClient;
+using System.Data.SQLite;
 //using PrimMesher;
 
 
@@ -31,7 +35,12 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
         private string m_version = "0.0";
         protected OpenSimBase m_openSim;
         private BaseHttpServer m_server;
-        private List<MapRegion> m_regions;
+        private IConfigSource m_config;
+        private List<MapRegion> m_regions;        
+        private int UpdateInterval;
+        private string RemoteConnectionString;
+        private string LocalConnectionString;
+
         public string Version
         {
             get { return m_version; }
@@ -57,6 +66,31 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
             m_openSim = openSim;
             m_server = openSim.HttpServer;
             m_regions = new List<MapRegion>();
+            m_config = m_config = new IniConfigSource("WebMapService.ini");
+            try
+            {
+                IConfig config = m_config.Configs["Texture"];
+                LocalConnectionString = config.GetString("LocalConnectionString");
+                RemoteConnectionString = config.GetString("RemoteConnectionString");
+                UpdateInterval = config.GetInt("UpdateInterval");
+            }
+            catch (Exception e)
+            {
+                m_log.Error("Read WebMapService.ini failed with " + e.Message);
+            }
+            try
+            {
+                Utility.ConnectSqlite(LocalConnectionString);
+                Utility.InitializeSqlite();
+                Utility.DisconnectSqlite();
+            }
+            catch (Exception e)
+            {
+                m_log.Error("read TextureColor.db failed with " + e.Message);
+            }
+            ThreadStart GetTextureDataStart = new ThreadStart(GetTextureData);
+            Thread GetTextureDataThread = new Thread(GetTextureDataStart);
+            GetTextureDataThread.Start();
         }
         public void PostInitialise()
         {
@@ -139,27 +173,33 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                     {
                         return "Sorry, the request method is not supported by this service.";
                     }
-                //case "WFS":
-                //    if (httpRequest.QueryString["REQUEST"] == "GetFeature")
-                //    {
-                //        if ((httpRequest.QueryString["TypeName"] == "agent"))
-                //        {
-                //            switch (httpRequest.QueryString["FORMAT"])
-                //            { 
-                //                case "text":
-                //                    return m_agentLayer.GetFeaturesByText();
-                //                case "xml":
-                //                    return m_agentLayer.GetFeaturesByXML();
-                //            }
-                //        }
-                //        else
-                //            return "Query String is not supported";
-                //    }
-                //    break;
-                //default:
-                //    return "Unsupport Service";
             }
             return "Unsupported Service";
-        }   
+        }
+
+        private void GetTextureData()
+        {
+            while (true)
+            {
+                m_log.Debug("[WebMapService]: Start getting texture from remote database");
+                try
+                {
+                    Utility.ConnectMysql(RemoteConnectionString);
+                    List<TextureColorModel> data = Utility.GetDataFromMysql();
+                    Utility.DisconnectMysql();
+                    Utility.ConnectSqlite(LocalConnectionString);
+                    Utility.StoreDataIntoSqlite(data);
+                    Utility.DisconnectSqlite();
+                }
+                catch (Exception e)
+                {
+                    m_log.ErrorFormat("[WebMapService]: Get texture data failed with {0} {1}", e.Message, e.StackTrace);
+                }
+                m_log.Debug("[WebMapService]: Successfully got all remote texture data");
+                Thread.Sleep(UpdateInterval);
+            }
+        }
+
+        
     }
 }

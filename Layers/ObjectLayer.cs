@@ -5,132 +5,129 @@ using OpenSim.Region.Framework.Scenes;
 using System.Drawing;
 using OpenSim.Framework;
 using MapRendererCL;
+using OpenSim.Services.Interfaces;
+using FreeImageAPI;
+using System.IO;
+using Nini.Config;
+using System.Threading;
+using log4net;
+using System.Reflection;
+using System.Data.SQLite;
 
 namespace OpenSim.ApplicationPlugins.MapDataAdapter.Layers
 {
     public class ObjectLayer : BaseLayer
     {
         #region members
-        private List<LLProfileParamsCL> m_profileParams;
-        private List<LLPathParamsCL> m_pathParams;
-        private List<LLVolumeParamsCL> m_volumeParams;
-        private int m_volumeCount;
-        private List<LLVector3CL> m_positions;
-        private List<LLQuaternionCL> m_rotations;
-        private List<LLVector3CL> m_scales;
-        private List<TextureEntryListCL> m_textureEntryLists;       
+        private IAssetService m_assetService;
+        private List<PrimitiveCL> m_primitiveList;
+        private IConfigSource m_config;
+        private string MapPath;
+        private string LocalConnectionString;
+        private static readonly log4net.ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);  
         #endregion
        
         public ObjectLayer(Scene scene)
             : base(scene)
         {
-            m_pathParams = new List<LLPathParamsCL>();
-            m_profileParams = new List<LLProfileParamsCL>();
-            m_positions = new List<LLVector3CL>();
-            m_rotations = new List<LLQuaternionCL>();
-            m_scales = new List<LLVector3CL>();
-            m_textureEntryLists = new List<TextureEntryListCL>();
-            m_volumeParams = new List<LLVolumeParamsCL>();
+            m_primitiveList = new List<PrimitiveCL>();
+            try
+            {
+                m_config = new IniConfigSource("WebMapService.ini");
+                IConfig config = m_config.Configs["ObjectLayer"];
+                MapPath = config.GetString("MapPath");
+                LocalConnectionString = config.GetString("LocalConnectionString");
+            }
+            catch (Exception e)
+            {
+                throw new Exception("Read WebMapService.ini failed");
+            }
         }
 
         public override void initialize()
-        { 
+        {
             List<EntityBase> objs = m_scene.GetEntities();
-            int count = 0;
-            int primNum = 0;
+            
             lock (objs)
             {
-                foreach (EntityBase obj in objs)
+                Utility.ConnectSqlite(LocalConnectionString);
+                try
                 {
-                    if (obj is SceneObjectGroup)
+                    foreach (EntityBase obj in objs)
                     {
-                        SceneObjectGroup mapdot = (SceneObjectGroup)obj;
-                        foreach (SceneObjectPart part in mapdot.Children.Values)
+                        if (obj is SceneObjectGroup)
                         {
-                            if (part == null)
-                                continue;
-                            m_positions.Add(Conversion.toLLVector3(part.GroupPosition));
-                            m_scales.Add(Conversion.toLLVector3(part.Scale));
-                            m_rotations.Add(Conversion.toLLQuaternion(part.RotationOffset));
-
-                            PrimitiveBaseShape shape = part.Shape;
-                            m_pathParams.Add(new LLPathParamsCL(shape.PathCurve,
-                                shape.PathBegin, shape.PathEnd,
-                                shape.PathScaleX, shape.PathScaleY,
-                                shape.PathShearX, shape.PathShearY,
-                                Convert.ToByte(shape.PathTwist), Convert.ToByte(shape.PathTwistBegin),
-                                Convert.ToByte(shape.PathRadiusOffset),
-                                Convert.ToByte(shape.PathTaperX), Convert.ToByte(shape.PathTaperY),
-                                shape.PathRevolutions, Convert.ToByte(shape.PathSkew)));
-                            m_profileParams.Add(new LLProfileParamsCL(shape.ProfileCurve,
-                                shape.ProfileBegin, shape.ProfileEnd, shape.ProfileHollow));
-                            m_volumeParams.Add(new LLVolumeParamsCL(m_profileParams[count], m_pathParams[count]));
-                            count++;
-                            //get jpg texture files
-                            //generateJPGFiles(m_assetService, shape);
-
-                            //set texture information
-                            int facenum = part.GetNumberOfSides();
-                            primNum += facenum;
-                            TextureEntryListCL theTextureEntryListCL = new TextureEntryListCL(facenum);
-                            for (uint j = 0; j < facenum; j++)
+                            SceneObjectGroup mapdot = (SceneObjectGroup)obj;
+                            foreach (SceneObjectPart part in mapdot.Children.Values)
                             {
-                                theTextureEntryListCL.SetTextureEntry(
-                                    j,
-                                    new LLUUIDCL(shape.Textures.GetFace(j).TextureID.ToString()),
-                                    new LLColor4CL(shape.Textures.GetFace(j).RGBA.R, shape.Textures.GetFace(j).RGBA.G, shape.Textures.GetFace(j).RGBA.B, shape.Textures.GetFace(j).RGBA.A),
-                                    Convert.ToByte(shape.Textures.GetFace(j).MediaFlags),
-                                    shape.Textures.GetFace(j).Glow,
-                                    shape.Textures.GetFace(j).RepeatU,
-                                    shape.Textures.GetFace(j).RepeatV,
-                                    shape.Textures.GetFace(j).OffsetU,
-                                    shape.Textures.GetFace(j).OffsetV,
-                                    shape.Textures.GetFace(j).Rotation
-                                    );
+                                if (part == null)
+                                    continue;
+                                LLVector3CL position = Utility.toLLVector3(part.GroupPosition);
+                                LLQuaternionCL rotation = Utility.toLLQuaternion(part.RotationOffset);
+                                LLVector3CL scale = Utility.toLLVector3(part.Scale);
+                                PrimitiveBaseShape shape = part.Shape;
+                                LLPathParamsCL pathParams = new LLPathParamsCL(shape.PathCurve,
+                                    shape.PathBegin, shape.PathEnd,
+                                    shape.PathScaleX, shape.PathScaleY,
+                                    shape.PathShearX, shape.PathShearY,
+                                    shape.PathTwist, shape.PathTwistBegin,
+                                    shape.PathRadiusOffset,
+                                    shape.PathTaperX, shape.PathTaperY,
+                                    shape.PathRevolutions, shape.PathSkew);
+                                LLProfileParamsCL profileParams = new LLProfileParamsCL(shape.ProfileCurve,
+                                    shape.ProfileBegin, shape.ProfileEnd, shape.ProfileHollow);
+                                LLVolumeParamsCL volumeParams = new LLVolumeParamsCL(profileParams, pathParams);
+                                
+                                int facenum = part.GetNumberOfSides();
+                                List<SimpleColorCL> colors = new List<SimpleColorCL>();                                
+                                for (uint j = 0; j < facenum; j++)
+                                {
+                                    TextureColorModel data = Utility.GetDataFromSqlite(shape.Textures.GetFace(j).TextureID.ToString());
+                                    colors.Add(new SimpleColorCL(data.A, data.R, data.G, data.B));
+                                }
+                                m_primitiveList.Add(new PrimitiveCL(volumeParams, position, rotation, scale, colors.ToArray(), facenum));
                             }
-                            m_textureEntryLists.Add(theTextureEntryListCL);
                         }
                     }
                 }
-            }
-            m_volumeCount = count;
+                catch (Exception e)
+                {
+                    m_log.ErrorFormat("[WebMapService]: Initialize object layer failed with {0} {1}", e.Message, e.StackTrace);
+                }
+                Utility.DisconnectSqlite();
+            }                        
         }
 
         public override Bitmap render(BBox bbox, int width, int height, int elevation)
         {
-            LLVector3CL[] pos = new LLVector3CL[m_volumeCount];
-            LLVector3CL[] sca = new LLVector3CL[m_volumeCount];
-            LLQuaternionCL[] rot = new LLQuaternionCL[m_volumeCount];
-            LLVolumeParamsCL[] vop = new LLVolumeParamsCL[m_volumeCount];
-            TextureEntryListCL[] tel = new TextureEntryListCL[m_volumeCount];
-            for (int i = 0; i < m_volumeCount; i++)
-            {
-                pos[i] = m_positions[i];
-                sca[i] = m_scales[i];
-                rot[i] = m_rotations[i];
-                vop[i] = m_volumeParams[i];
-                tel[i] = m_textureEntryLists[i];
-            }
             MapRenderCL mr = new MapRenderCL();
             string regionID = m_scene.RegionInfo.RegionID.ToString();
+            try
+            {
+                bool result = mr.mapRender(regionID,
+                    bbox.MinX, bbox.MinY, 0, bbox.MaxX, bbox.MaxY, (float)elevation,
+                    m_primitiveList.ToArray(), m_primitiveList.Count,
+                    width, height,
+                    MapPath);
 
-            
-            mr.mapRender(
-                regionID,
-                bbox.MinX, bbox.MinY, 0, bbox.MaxX, bbox.MaxY, (float)elevation,
-                vop,
-                m_volumeCount,
-                pos,
-                rot,
-                sca,
-                tel,
-                width,
-                height,
-                "e:\\\\MonoImage\\\\",
-                "e:\\\\regionMap\\\\");
-            Bitmap bmp = new Bitmap("e:\\\\regionMap\\\\" + regionID + ".bmp");
-            bmp.MakeTransparent(Color.FromArgb(0, 0, 0, 0));
-            return bmp;
+                if (result)
+                {
+                    Bitmap bmp = new Bitmap(MapPath + regionID + ".bmp");
+                    bmp.MakeTransparent(Color.FromArgb(0, 0, 0, 0));
+                    return bmp;
+                }
+                else
+                {
+                    Bitmap bmp = new Bitmap(width, height);
+                    return bmp;
+                }
+            }
+            catch (Exception e)
+            {
+                m_log.Error(e.Message + e.StackTrace);
+                Bitmap bmp = new Bitmap(width, height);
+                return bmp;
+            }
         }
     }
 }

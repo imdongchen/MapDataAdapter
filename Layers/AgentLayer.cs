@@ -37,7 +37,7 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter.Layers
                     if (!agent.IsChildAgent)
                     {
                         PointF agentPos = new PointF(agent.OffsetPosition.X, agent.OffsetPosition.Y);
-                        PointF agentImgPos = Conversion.Projection(ref agentPos, ref bbox, width, height);
+                        PointF agentImgPos = Utility.Projection(ref agentPos, ref bbox, width, height);
                         RectangleF rect = new RectangleF(agentImgPos.X, agentImgPos.Y, 20, 20); //point width and height hard coded as 20, should be changed
                         gfx.FillEllipse(brush, rect);
                     }

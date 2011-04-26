@@ -6,6 +6,7 @@ using OpenMetaverse;
 using OpenSim.Region.Framework.Scenes;
 using OpenSim.ApplicationPlugins.MapDataAdapter.Layers;
 using System.Drawing;
+using Nini.Config;
 
 namespace OpenSim.ApplicationPlugins.MapDataAdapter
 {
@@ -100,9 +101,9 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                         m_agentLyr.initialize();
                         m_hasAgentLyr = true;
                         break;
-                    case "primitive":
+                    case "primitive":                       
                         m_objLyr = new ObjectLayer(m_scene);
-                        m_objLyr.initialize();
+                        m_objLyr.initialize(); 
                         m_hasObjLyr = true;
                         break;
                     case "terrain":
