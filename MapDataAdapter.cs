@@ -120,7 +120,7 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
 
         public string owsHandler(string request, string path, string param,
                                       OSHttpRequest httpRequest, OSHttpResponse httpResponse)
-        {            
+        {
             switch (httpRequest.QueryString["SERVICE"])
             {
                 case "WMS":
@@ -143,7 +143,7 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                                     region.MapRegionBBox = bbox;
                                     region.MapRegionImg = new MapRegionImage(width, height);
                                     region.initialize(layers);
-                                    
+
                                     Bitmap queryImg = region.generateMapRegionImg();
                                     System.IO.MemoryStream stream = new System.IO.MemoryStream();
                                     queryImg.Save(stream, System.Drawing.Imaging.ImageFormat.Png);

@@ -79,12 +79,13 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter.Layers
                                 LLVolumeParamsCL volumeParams = new LLVolumeParamsCL(profileParams, pathParams);
                                 
                                 int facenum = part.GetNumberOfSides();
-                                List<SimpleColorCL> colors = new List<SimpleColorCL>();                                
+                                List<SimpleColorCL> colors = new List<SimpleColorCL>();
                                 for (uint j = 0; j < facenum; j++)
                                 {
                                     TextureColorModel data = Utility.GetDataFromSqlite(shape.Textures.GetFace(j).TextureID.ToString());
                                     colors.Add(new SimpleColorCL(data.A, data.R, data.G, data.B));
                                 }
+
                                 m_primitiveList.Add(new PrimitiveCL(volumeParams, position, rotation, scale, colors.ToArray(), facenum));
                             }
                         }

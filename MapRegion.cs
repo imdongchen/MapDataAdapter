@@ -7,6 +7,8 @@ using OpenSim.Region.Framework.Scenes;
 using OpenSim.ApplicationPlugins.MapDataAdapter.Layers;
 using System.Drawing;
 using Nini.Config;
+using log4net;
+using System.Reflection;
 
 namespace OpenSim.ApplicationPlugins.MapDataAdapter
 {
@@ -42,6 +44,7 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
         public MapRegionImage MapRegionImg;
         public BBox MapRegionBBox;
         public int Elevation;
+        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public uint LocX
         {
