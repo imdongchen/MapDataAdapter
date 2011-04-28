@@ -106,7 +106,8 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                         break;
                     case "primitive":                       
                         m_objLyr = new ObjectLayer(m_scene);
-                        m_objLyr.initialize(); 
+                        m_objLyr.initialize();
+                        m_log.Debug("[WebMapService]: Primitive Layer initialized");
                         m_hasObjLyr = true;
                         break;
                     case "terrain":

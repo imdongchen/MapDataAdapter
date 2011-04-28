@@ -82,7 +82,7 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter.Layers
                                 List<SimpleColorCL> colors = new List<SimpleColorCL>();
                                 for (uint j = 0; j < facenum; j++)
                                 {
-                                    TextureColorModel data = Utility.GetDataFromSqlite(shape.Textures.GetFace(j).TextureID.ToString());
+                                    TextureColorModel data = Utility.GetDataFromFile(shape.Textures.GetFace(j).TextureID.ToString());
                                     colors.Add(new SimpleColorCL(data.A, data.R, data.G, data.B));
                                 }
 

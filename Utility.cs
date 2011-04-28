@@ -41,6 +41,54 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
             return result;
         }
 
+        public static long IntToLong(int a, int b)
+        {
+            return ((long)a << 32 | (long)b);
+        }
+
+        public static void LongToInt(long a, out int b, out int c)
+        {
+            b = (int)(a >> 32);
+            c = (int)(a & 0x00000000FFFFFFFF);
+        }
+
+        public static void StoreDataIntoFiles(List<TextureColorModel> data)
+        {
+            if (!Directory.Exists("textureColorCache"))
+                Directory.CreateDirectory("textureColorCache");
+            foreach (TextureColorModel model in data)
+            {
+                string file = "textureColorCache//" + model.ID;
+                if (File.Exists(file))
+                    return;
+                TextWriter tw = new StreamWriter(file, false);
+                tw.WriteLine(model.A);
+                tw.WriteLine(model.R);
+                tw.WriteLine(model.G);
+                tw.WriteLine(model.B);
+                tw.Close();
+            }
+        }
+
+        public static TextureColorModel GetDataFromFile(string id)
+        {
+            TextureColorModel model;
+            string file = "textureColorCache//" + id;
+            if (!File.Exists(file))
+                model = new TextureColorModel(null, 255, 255, 0, 0);
+            else
+            {
+                TextReader tr = new StreamReader(file);
+                byte a = Convert.ToByte(tr.ReadLine());
+                byte r = Convert.ToByte(tr.ReadLine());
+                byte g = Convert.ToByte(tr.ReadLine());
+                byte b = Convert.ToByte(tr.ReadLine());
+                model = new TextureColorModel(id, a, r, g, b);
+                tr.Close();
+            }
+            return model;
+        }
+
         public static void ConnectSqlite(string connectionString)
         {
             m_sqliteConnect = new SQLiteConnection(connectionString);
