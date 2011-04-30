@@ -17,6 +17,7 @@ using System.Threading;
 using MySql.Data.MySqlClient;
 using System.Data.SQLite;
 using System.Drawing.Drawing2D;
+using OpenSim.ApplicationPlugins.MapDataAdapter.Layers;
 
 //using PrimMesher;
 
@@ -42,12 +43,12 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
         private int m_texUpdateInterval;
         private int m_mapUpdateInterval;
         private string m_remoteConnectionString;
-        private string m_localConnectionString;
-        private int m_maxMapSize;
+        private int m_minMapSize;
+        private int m_zoomLevels;
         private int m_maxRenderElevation;
         private int m_minTileSize;
         private HashSet<float> m_scales;
-        private Dictionary<float, int> m_sections;
+        private Dictionary<float, float> m_sections;
 
         public string Version
         {
@@ -75,18 +76,18 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
             m_server = openSim.HttpServer;
             m_regions = new List<MapRegion>();
             m_scales = new HashSet<float>();
-            m_sections = new Dictionary<float, int>();
+            m_sections = new Dictionary<float, float>();
             m_config = m_config = new IniConfigSource("WebMapService.ini");
             try
             {
                 IConfig config              = m_config.Configs["Map"];
-                m_localConnectionString     = config.GetString("LocalConnectionString");
                 m_remoteConnectionString    = config.GetString("RemoteConnectionString");
                 m_texUpdateInterval         = config.GetInt("TexUpdateInterval");
                 m_mapUpdateInterval         = config.GetInt("MapUpdateInterval");
-                m_maxMapSize               = config.GetInt("MaxMapSize");
+                m_minMapSize                = config.GetInt("MinMapSize");
+                m_zoomLevels                = config.GetInt("ZoomLevels");
                 m_maxRenderElevation        = config.GetInt("MaxRenderElevation");
-                m_minTileSize             = config.GetInt("MinTileSize");
+                m_minTileSize               = config.GetInt("MinTileSize");
             }
             catch (Exception e)
             {
@@ -125,42 +126,38 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
 
         private void generateMapCache()
         {
-            string[] layers = { "primitive", "terrain" };
             if (!Directory.Exists("mapCache"))
                 Directory.CreateDirectory("mapCache");
             while (true)
             {
                 m_log.Debug("[WebMapService]: Start generating map caches");
-                int size = m_maxMapSize;
-                do
+                foreach (MapRegion region in m_regions)
                 {
-                    float scale = (float)size / 256;
-                    m_scales.Add(scale);
-                    string mapCachePath = "mapCache//" + scale.ToString();
+                    m_log.Debug("[WebMapService]: Start generating cache of region" + region.ID);
+                    int size = m_minMapSize;
+                    string mapCachePath = "mapCache//" + region.ID + "//";
                     if (!Directory.Exists(mapCachePath))
                         Directory.CreateDirectory(mapCachePath);
-                    int tileNum = 1;
-                    while (size / tileNum > m_minTileSize)
-                        tileNum++;
-                    int tileSize = size / tileNum;
-                    int section = 256 / tileNum;
-                    if (!m_sections.ContainsKey(scale))
-                        m_sections.Add(scale, section);
-                    foreach (MapRegion region in m_regions)
+                    for (int level = 1; level < m_zoomLevels; level++)
                     {
-                        string regionCachePath = mapCachePath + "//" + region.ID;
-                        if (!Directory.Exists(regionCachePath))
-                            Directory.CreateDirectory(regionCachePath);
-                        m_log.DebugFormat("[WebMapService]: Start rendering region {0}", region.ID);
-                        //generate a whole map image 
+                        float scale = (float)size / 256;
+                        m_scales.Add(scale);
+                        string tileCachePath = mapCachePath + scale.ToString();
+                        if (!Directory.Exists(tileCachePath))
+                            Directory.CreateDirectory(tileCachePath);
+                        int tileNum = 1;
+                        while (size / tileNum > m_minTileSize)
+                            tileNum++;
+                        int tileSize = size / tileNum;
+                        float section = 256 / tileNum;
+                        if (!m_sections.ContainsKey(scale))
+                            m_sections.Add(scale, section);
                         Bitmap mapCache = null;
                         try
                         {
-                            region.Elevation = m_maxRenderElevation;
-                            region.MapRegionBBox = new BBox(0, 0, 256, 256);
-                            region.MapRegionImg = new MapRegionImage(size, size);
-                            region.initialize(layers);
-                            mapCache = region.generateMapRegionImg();
+                            BBox bbox = new BBox(0, 0, 256, 256);
+                            region.initialize("primitive");
+                            mapCache = region.generateLayerImage("primitive", bbox, size, size, m_maxRenderElevation);
                         }
                         catch (Exception e)
                         {
@@ -181,9 +178,10 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                                         Rectangle destRec = new Rectangle(0, 0, tileSize, tileSize);
                                         gfx.DrawImage(mapCache, destRec, srcRec, GraphicsUnit.Pixel);
                                         gfx.Dispose();
-                                        string tileName = regionCachePath + "//" + Utility.IntToLong(i * section, j * section).ToString();
+                                        string tileName = tileCachePath + "//" + Utility.IntToLong(i * (int)section, j * (int)section).ToString();
                                         tileCache.Save(tileName);
                                         tileCache.Dispose();
+                                        tileCache = null;
                                     }
                             }
                             catch (Exception e)
@@ -191,11 +189,12 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                                 m_log.ErrorFormat("[WebMapService]: Divide map into tiles failed with {0} {1}", e.Message, e.StackTrace);
                             }
                         }
-                        m_log.DebugFormat("[WebMapService]: Finish rendering region {0}", region.ID);
+                        mapCache.Dispose();
+                        mapCache = null;
+                        size = size * 2;
                     }
-                    size /= 2;
-                } while (size * 2 > 256);
-
+                    m_log.DebugFormat("[WebMapService]: Finish rendering region {0}", region.ID);
+                }
                 m_log.Debug("[WebMapService]: Map Caches generated");
                 Thread.Sleep(m_mapUpdateInterval);
             }
@@ -217,91 +216,124 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                         int elevation = Int32.Parse(httpRequest.QueryString["ELEVATION"]);
                         string regionID = httpRequest.QueryString["REGIONID"];
 
-                        Bitmap objLayer = new Bitmap(width, height);
-                        float scale = (float)height / bbox.Width;
-                        float tmpScale = scale;
-                        string queryPath = "mapCache//";
-                        float diff = 10000.0f;
-                        foreach (float s in m_scales)
+                        //Get tiles included in the BBOX and merge them together
+                        List<Bitmap> layerImgs = new List<Bitmap>();
+                        foreach (MapRegion region in m_regions)
                         {
-                            float tmp = Math.Abs(scale - s);
-                            if (diff > tmp)
+                            if (region.ID == regionID)
                             {
-                                diff = tmp;
-                                tmpScale = s;
+                                string queryPath = "mapCache//" + regionID + "//";
+
+                                for (int i = 0, len = layers.Length; i < len; i++)
+                                {
+                                    if (layers[i] == "terrain")
+                                    {
+                                        region.initialize("terrain");
+                                        layerImgs.Add(region.generateLayerImage("terrain", bbox, width, height, elevation));
+                                    }
+                                    if (layers[i] == "primitive")
+                                    {
+                                        float scale = (float)height / bbox.Width;
+                                        float tmpScale = scale;
+                                        float diff = 10000.0f;
+                                        foreach (float s in m_scales)
+                                        {
+                                            float tmp = Math.Abs(scale - s);
+                                            if (diff > tmp)
+                                            {
+                                                diff = tmp;
+                                                tmpScale = s;
+                                            }
+                                        }
+                                        scale = tmpScale;
+                                        queryPath = queryPath + scale + "//";
+                                        float section = 0.0f;
+                                        try
+                                        {
+                                            section = m_sections[scale];
+                                        }
+                                        catch (Exception e)
+                                        {
+                                            m_log.ErrorFormat("[WebMapService]: No such scale in list");
+                                        }
+                                        float tileSize = scale * section;
+                                        Bitmap primLayer = new Bitmap(width, height);
+                                        int blockMinX = bbox.MinX / (int)section * (int)section;
+                                        int blockMinY = bbox.MinY / (int)section * (int)section;
+                                        int blockMaxX = (bbox.MaxX - 1) / (int)section * (int)section;
+                                        int blockMaxY = (bbox.MaxY - 1) / (int)section * (int)section;
+                                        Graphics gfx = Graphics.FromImage(primLayer);
+                                        gfx.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                                        for (int y = blockMinY; y <= blockMaxY; y += (int)section)
+                                            for (int x = blockMinX; x <= blockMaxX; x += (int)section)
+                                            {
+                                                string tileName = queryPath + Utility.IntToLong(x, y);
+                                                Bitmap tile = null;
+                                                try
+                                                {
+                                                    tile = new Bitmap(tileName);
+                                                }
+                                                catch (Exception e)
+                                                {
+                                                    m_log.ErrorFormat("[WebMapService]: Tile file not found with {0} {1}", e.Message, e.StackTrace);
+                                                    tile = new Bitmap((int)tileSize, (int)tileSize);
+                                                    Graphics g = Graphics.FromImage(tile);
+                                                    g.Clear(Color.Blue);
+                                                    g.Dispose();
+                                                }
+                                                //Calculate boundary of tiles and map
+                                                float tileLeftX, tileRightX, tileBottomY, tileUpY;
+                                                float mapLeftX, mapRightX, mapBottomY, mapUpY;
+                                                float difLeftX = (float)bbox.MinX - (float)x;
+                                                float difRightX = (float)bbox.MaxX - ((float)x + section);
+                                                float difBottomY = (float)bbox.MinY - (float)y;
+                                                float difUpY = (float)bbox.MaxY - ((float)y + section);
+                                                if (difLeftX > 0) { tileLeftX = difLeftX; mapLeftX = 0; }
+                                                else { tileLeftX = 0; mapLeftX = -difLeftX; }
+                                                if (difRightX > 0) { tileRightX = section; mapRightX = bbox.Width - difRightX; }
+                                                else { tileRightX = section + difRightX; mapRightX = bbox.Width; }
+                                                if (difBottomY > 0) { tileBottomY = section - difBottomY; mapBottomY = bbox.Height; }
+                                                else { tileBottomY = section; mapBottomY = bbox.Height + difBottomY; }
+                                                if (difUpY > 0) { tileUpY = 0; mapUpY = difUpY; }
+                                                else { tileUpY = -difUpY; mapUpY = 0; }
+                                                try
+                                                {
+                                                    RectangleF srcRec = new RectangleF(tileLeftX / section * tileSize, tileUpY / section * tileSize, (tileRightX - tileLeftX) / section * tileSize, (tileBottomY - tileUpY) / section * tileSize);
+                                                    RectangleF destRec = new RectangleF(mapLeftX / bbox.Width * width, mapUpY / bbox.Height * height, (mapRightX - mapLeftX) / bbox.Width * width, (mapBottomY - mapUpY) / bbox.Height * height);
+                                                    gfx.DrawImage(tile, destRec, srcRec, GraphicsUnit.Pixel);
+                                                    tile.Dispose();
+                                                }
+                                                catch (Exception e)
+                                                {
+                                                    tile.Dispose();
+                                                    m_log.ErrorFormat("[WebMapService]: Failed to cut and merge tiles with {0} {1}", e.Message, e.StackTrace);
+                                                }
+                                            }
+                                        gfx.Dispose();
+                                        layerImgs.Add(primLayer);
+                                    }
+                                }
                             }
                         }
-                        scale = tmpScale;
-                        queryPath += scale.ToString() + "//" + regionID + "//";
-                        int section = 0;
+                        
+                        Bitmap queryImg = null;
                         try
                         {
-                            section = m_sections[scale];
+                            queryImg = overlayImages(width, height, layerImgs);
                         }
                         catch (Exception e)
                         {
-                            m_log.ErrorFormat("[WebMapService]: No such scale in list");
+                            m_log.ErrorFormat("[WebMapService]: Failed to overlay layers with {0} {1}", e.Message, e.StackTrace);
                         }
-                        float tileSize = scale * section;
-
-                        //Get tiles included in the BBOX and merge them together
-                        int blockMinX = bbox.MinX / section * section;
-                        int blockMinY = bbox.MinY / section * section;
-                        int blockMaxX = (bbox.MaxX - 1) / section * section;
-                        int blockMaxY = (bbox.MaxY - 1) / section * section;
-                        Graphics gfx = Graphics.FromImage(objLayer);
-                        gfx.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                        for (int y = blockMinY; y <= blockMaxY; y += section)
-                            for (int x = blockMinX; x <= blockMaxX; x += section)
-                            {
-                                string tileName = queryPath + Utility.IntToLong(x, y);
-                                Bitmap tile = null;
-                                try
-                                {
-                                    tile = new Bitmap(tileName);
-                                }
-                                catch (Exception e)
-                                {
-                                    m_log.ErrorFormat("[WebMapService]: Tile file not found with {0} {1}", e.Message, e.StackTrace);
-                                    tile = new Bitmap((int)tileSize, (int)tileSize);
-                                    Graphics g = Graphics.FromImage(tile);
-                                    g.Clear(Color.Blue);
-                                    g.Dispose();
-                                }
-                                //Calculate boundary of tiles and map
-                                int tileLeftX, tileRightX, tileBottomY, tileUpY;
-                                int mapLeftX, mapRightX, mapBottomY, mapUpY;
-                                int difLeftX = bbox.MinX - x;
-                                int difRightX = bbox.MaxX - (x+section);
-                                int difBottomY = bbox.MinY - y;
-                                int difUpY = bbox.MaxY - (y+section);
-                                if (difLeftX > 0) { tileLeftX = difLeftX; mapLeftX = 0; }
-                                else { tileLeftX = 0; mapLeftX = -difLeftX; }
-                                if (difRightX > 0) { tileRightX = section; mapRightX = bbox.Width - difRightX; }
-                                else { tileRightX = section + difRightX; mapRightX = bbox.Width; }
-                                if (difBottomY > 0) { tileBottomY = section - difBottomY; mapBottomY = bbox.Height; }
-                                else { tileBottomY = section; mapBottomY = bbox.Height + difBottomY; }
-                                if (difUpY > 0) { tileUpY = 0; mapUpY = difUpY; }
-                                else { tileUpY = -difUpY; mapUpY = 0; }
-                                try
-                                {
-                                    RectangleF srcRec = new RectangleF((float)tileLeftX / section * tileSize, (float)tileUpY / section * tileSize, (float)(tileRightX - tileLeftX) / section * tileSize, (float)(tileBottomY - tileUpY) / section * tileSize);
-                                    RectangleF destRec = new RectangleF((float)mapLeftX / bbox.Width * width, (float)mapUpY / bbox.Height * height, (float)(mapRightX - mapLeftX) / bbox.Width * width, (float)(mapBottomY - mapUpY) / bbox.Height * height);
-                                    gfx.DrawImage(tile, destRec, srcRec, GraphicsUnit.Pixel);
-                                    tile.Dispose();
-                                }
-                                catch (Exception e)
-                                {
-                                    tile.Dispose();
-                                    m_log.ErrorFormat("[WebMapService]: Failed to cut and merge tiles with {0} {1}", e.Message, e.StackTrace);
-                                }
-                            }
-                        gfx.Dispose();
-
-                     
+                        for (int i = 0, len = layerImgs.Count; i < len; i++)
+                        {
+                            layerImgs[i].Dispose();
+                            layerImgs[i] = null;
+                        }
                         System.IO.MemoryStream stream = new System.IO.MemoryStream();
-                        objLayer.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
-                        objLayer.Dispose();
+                        queryImg.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+                        queryImg.Dispose();
+                        queryImg = null;
                         byte[] byteImage = stream.ToArray();
                         stream.Close();
                         stream.Dispose();
@@ -323,6 +355,20 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                     }
             }
             return "Unsupported Service";
+        }
+
+        private Bitmap overlayImages(int width, int height, List<Bitmap> layerImgs)
+        {
+            Bitmap image = new Bitmap(width, height);
+            Graphics gfx = Graphics.FromImage(image);
+            gfx.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.GammaCorrected;
+            gfx.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceOver;
+            foreach (Bitmap img in layerImgs)
+            {
+                gfx.DrawImage(img, new Rectangle(0, 0, width, height));
+            }
+            gfx.Dispose();
+            return image;
         }
 
         private void GetTextureData()

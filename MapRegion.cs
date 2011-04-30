@@ -12,22 +12,6 @@ using System.Reflection;
 
 namespace OpenSim.ApplicationPlugins.MapDataAdapter
 {
-    public class MapRegionImage
-    {
-        public Bitmap MapRegionBmp;
-        public int Width;
-        public int Height;
-        public int X;
-        public int Y;
-        public MapRegionImage() { }
-        public MapRegionImage(int width, int height)
-        {
-            Width = width;
-            Height = height;
-            MapRegionBmp = new Bitmap(width, height);
-        }
-    }
-
     public class MapRegion 
     {
         private UUID m_id;
@@ -35,15 +19,9 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
         private uint m_locX;
         private uint m_locY;
         private AgentLayer m_agentLyr;
-        private ObjectLayer m_objLyr;
+        private PrimitiveLayer m_primLyr;
         private TerrainLayer m_terrainLyr;
         private Scene m_scene;
-        private bool m_hasAgentLyr = false;
-        private bool m_hasObjLyr = false;
-        private bool m_hasTerrainLyr = false;
-        public MapRegionImage MapRegionImg;
-        public BBox MapRegionBBox;
-        public int Elevation;
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public uint LocX
@@ -86,85 +64,52 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
             m_locY = scene.RegionInfo.RegionLocY;
         }
 
-        /// <summary>
-        /// get necessary data for layers in a region
-        /// </summary>
-        /// <param name="layers">requested layers, namely agent, primitive and terrain</param>
-        public void initialize(string[] layers)
+        public void initialize(string layer)
         {
-            m_hasAgentLyr = false;
-            m_hasObjLyr = false;
-            m_hasTerrainLyr = false;
-            for (int i = 0; i < layers.Length; i++)
+            switch (layer)
             {
-                switch (layers[i])
+                case "agent":
+                    m_agentLyr = new AgentLayer(m_scene);
+                    m_agentLyr.initialize();
+                    break;
+                case "primitive":
+                    m_primLyr = new PrimitiveLayer(m_scene);
+                    m_primLyr.initialize();
+                    break;
+                case "terrain":
+                    m_terrainLyr = new TerrainLayer(m_scene);
+                    m_terrainLyr.initialize();
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        public Bitmap generateLayerImage(string layer, BBox bbox, int width, int height, int elevation)
+        {
+            Bitmap layerImg = null;
+            try
+            {
+                switch (layer)
                 {
                     case "agent":
-                        m_agentLyr = new AgentLayer(m_scene);
-                        m_agentLyr.initialize();
-                        m_hasAgentLyr = true;
+                        layerImg = m_agentLyr.render(bbox, width, height, elevation);
                         break;
-                    case "primitive":                       
-                        m_objLyr = new ObjectLayer(m_scene);
-                        m_objLyr.initialize();
-                        m_log.Debug("[WebMapService]: Primitive Layer initialized");
-                        m_hasObjLyr = true;
+                    case "primitive":
+                        layerImg = m_primLyr.render(bbox, width, height, elevation);
                         break;
                     case "terrain":
-                        m_terrainLyr = new TerrainLayer(m_scene);
-                        m_terrainLyr.initialize();
-                        m_hasTerrainLyr = true;
+                        layerImg = m_terrainLyr.render(bbox, width, height, elevation);
                         break;
                     default:
                         break;
                 }
             }
-        }
-
-        /// <summary>
-        /// generate the bitmap of a region
-        /// </summary>
-        /// <param name="bbox">requested rendering boundary</param>
-        /// <param name="height">height of the bitmap</param>
-        /// <param name="width">width of the bitmap</param>
-        /// <returns></returns>
-        public Bitmap generateMapRegionImg()
-        {
-            Bitmap mapRegionImg = new Bitmap(MapRegionImg.Width, MapRegionImg.Height);
-
-            try
-            {
-                int width = MapRegionImg.Width;
-                int height = MapRegionImg.Height;
-
-                Graphics gf = Graphics.FromImage((Image)mapRegionImg);
-
-                List<Bitmap> layerBatches = new List<Bitmap>();
-
-                if (m_hasTerrainLyr)
-                    layerBatches.Add(m_terrainLyr.render(MapRegionBBox, width, height, Elevation));
-                if (m_hasObjLyr)
-                    layerBatches.Add(m_objLyr.render(MapRegionBBox, width, height, Elevation));
-                if (m_hasAgentLyr)
-                    layerBatches.Add(m_agentLyr.render(MapRegionBBox, width, height, Elevation));
-
-                for (int i = 0; i < layerBatches.Count; i++)
-                {
-                    gf.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.GammaCorrected;
-                    //determine the overwrite mode
-                    gf.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceOver;
-                    gf.DrawImage(layerBatches[i], new Rectangle(0, 0, width, height));
-                    layerBatches[i].Dispose();
-                }
-                gf.Dispose();
-            }
             catch (Exception e)
             {
-                throw new Exception("generate map region image failed, " + e.Message);
+                m_log.ErrorFormat("[WebMapService]: Generate layer image failed with {0} {1}", e.Message, e.StackTrace);
             }
-            
-            MapRegionImg.MapRegionBmp = mapRegionImg;
-            return mapRegionImg;            
+            return layerImg;
         }
     }
 }
