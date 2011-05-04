@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using OpenSim.Region.Framework.Scenes;
@@ -24,9 +24,9 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter.Layers
         private IConfigSource m_config;
         private string MapPath;
         private string LocalConnectionString;
-        private static readonly log4net.ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);  
+        private static readonly log4net.ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         #endregion
-       
+
         public ObjectLayer(Scene scene)
             : base(scene)
         {
@@ -36,7 +36,6 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter.Layers
                 m_config = new IniConfigSource("WebMapService.ini");
                 IConfig config = m_config.Configs["ObjectLayer"];
                 MapPath = config.GetString("MapPath");
-                LocalConnectionString = config.GetString("LocalConnectionString");
             }
             catch (Exception e)
             {
@@ -47,10 +46,9 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter.Layers
         public override void initialize()
         {
             List<EntityBase> objs = m_scene.GetEntities();
-            
+
             lock (objs)
             {
-                Utility.ConnectSqlite(LocalConnectionString);
                 try
                 {
                     foreach (EntityBase obj in objs)
@@ -77,7 +75,7 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter.Layers
                                 LLProfileParamsCL profileParams = new LLProfileParamsCL(shape.ProfileCurve,
                                     shape.ProfileBegin, shape.ProfileEnd, shape.ProfileHollow);
                                 LLVolumeParamsCL volumeParams = new LLVolumeParamsCL(profileParams, pathParams);
-                                
+
                                 int facenum = part.GetNumberOfSides();
                                 List<SimpleColorCL> colors = new List<SimpleColorCL>();
                                 for (uint j = 0; j < facenum; j++)
@@ -95,8 +93,7 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter.Layers
                 {
                     m_log.ErrorFormat("[WebMapService]: Initialize object layer failed with {0} {1}", e.Message, e.StackTrace);
                 }
-                Utility.DisconnectSqlite();
-            }                        
+            }
         }
 
         public override Bitmap render(BBox bbox, int width, int height, int elevation)

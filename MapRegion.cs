@@ -160,11 +160,21 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
             }
             catch (Exception e)
             {
-                throw new Exception("generate map region image failed, " + e.Message);
+                m_log.Error("generate map region image failed, " + e.Message);
             }
             
             MapRegionImg.MapRegionBmp = mapRegionImg;
             return mapRegionImg;            
+        }
+
+        internal string GetFeaturesByText()
+        {
+            return m_agentLyr.GetFeaturesByText();
+        }
+
+        internal string GetFeaturesByXml()
+        {
+            return m_agentLyr.GetFeaturesByXml();
         }
     }
 }

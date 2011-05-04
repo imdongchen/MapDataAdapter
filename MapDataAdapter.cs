@@ -43,7 +43,8 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
         private int m_mapUpdateInterval;
         private string m_remoteConnectionString;
         private string m_localConnectionString;
-        private int m_maxMapSize;
+        private int m_minMapSize;
+        private int m_zoomLevel;
         private int m_maxRenderElevation;
         private int m_minTileSize;
         private HashSet<float> m_scales;
@@ -80,13 +81,13 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
             try
             {
                 IConfig config              = m_config.Configs["Map"];
-                m_localConnectionString     = config.GetString("LocalConnectionString");
                 m_remoteConnectionString    = config.GetString("RemoteConnectionString");
                 m_texUpdateInterval         = config.GetInt("TexUpdateInterval");
                 m_mapUpdateInterval         = config.GetInt("MapUpdateInterval");
-                m_maxMapSize               = config.GetInt("MaxMapSize");
+                m_minMapSize                = config.GetInt("MinMapSize");
+                m_zoomLevel                = config.GetInt("ZoomLevels");
                 m_maxRenderElevation        = config.GetInt("MaxRenderElevation");
-                m_minTileSize             = config.GetInt("MinTileSize");
+                m_minTileSize               = config.GetInt("MinTileSize");
             }
             catch (Exception e)
             {
@@ -131,8 +132,8 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
             while (true)
             {
                 m_log.Debug("[WebMapService]: Start generating map caches");
-                int size = m_maxMapSize;
-                do
+                int size = m_minMapSize;
+                for (int level = 0; level < m_zoomLevel; level++)
                 {
                     float scale = (float)size / 256;
                     m_scales.Add(scale);
@@ -193,8 +194,8 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                         }
                         m_log.DebugFormat("[WebMapService]: Finish rendering region {0}", region.ID);
                     }
-                    size /= 2;
-                } while (size * 2 > 256);
+                    size *= 2;
+                } 
 
                 m_log.Debug("[WebMapService]: Map Caches generated");
                 Thread.Sleep(m_mapUpdateInterval);
@@ -297,7 +298,6 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                                 }
                             }
                         gfx.Dispose();
-
                      
                         System.IO.MemoryStream stream = new System.IO.MemoryStream();
                         objLayer.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
@@ -321,7 +321,37 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                     {
                         return "Sorry, the request method is not supported by this service.";
                     }
+                case "WFS":
+                    if (httpRequest.QueryString["REQUEST"] == "GetFeature")
+                    {
+                        if ((httpRequest.QueryString["TypeName"] == "agent"))
+                        {
+                            switch (httpRequest.QueryString["FORMAT"])
+                            {
+                                case "text":
+                                    string textResult = null;
+                                    foreach (MapRegion region in m_regions)
+                                    {
+                                        textResult += region.GetFeaturesByText();
+                                    }
+                                    return textResult;
+                                case "xml":
+                                    string xmlResult = null;
+                                    foreach (MapRegion region in m_regions)
+                                    {
+                                        xmlResult += region.GetFeaturesByXml();
+                                    }
+                                    return xmlResult;
+                                default:
+                                    return "Feature format not supported";
+                            }
+                        }
+                        else
+                            return "Query String is not supported";
+                    }
+                    break;
             }
+
             return "Unsupported Service";
         }
 
