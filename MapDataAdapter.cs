@@ -322,9 +322,9 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter
                         return "Sorry, the request method is not supported by this service.";
                     }
                 case "WFS":
-                    if (httpRequest.QueryString["REQUEST"] == "GetFeature")
+                    if (httpRequest.QueryString["REQUEST"] == "DescribeFeatureType")
                     {
-                        if ((httpRequest.QueryString["TypeName"] == "agent"))
+                        if ((httpRequest.QueryString["TYPENAME"] == "agent"))
                         {
                             switch (httpRequest.QueryString["FORMAT"])
                             {

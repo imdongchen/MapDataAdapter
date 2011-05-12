@@ -112,7 +112,7 @@ namespace OpenSim.ApplicationPlugins.MapDataAdapter.Layers
                 */
                 featureWriter.WriteElementString("name", agent.Name);
                 featureWriter.WriteStartElement("gml", "Point");
-                string posString = agent.OffsetPosition.X + "," + agent.OffsetPosition.Y + "," + agent.OffsetPosition.Z;
+                string posString = agent.AbsolutePosition.X + "," + agent.AbsolutePosition.Y + "," + agent.AbsolutePosition.Z;
                 featureWriter.WriteElementString("gml", "coordinates", null, posString);
                 featureWriter.WriteEndElement();
                 featureWriter.WriteEndElement();
